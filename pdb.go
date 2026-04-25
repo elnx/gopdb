@@ -146,8 +146,7 @@ func OpenPE(peFile string, opts ...*OpenPEOptions) (*PDB, error) {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		tempFiles, _ := symdl.NewTempFileManager()
-		if err := symdl.DownloadSymbol(ctx, client, symdl.UpstreamSymbolURL(cfg.Upstream, info), cachePath, tempFiles); err != nil {
+		if err := symdl.DownloadSymbol(ctx, client, symdl.UpstreamSymbolURL(cfg.Upstream, info), cachePath); err != nil {
 			return nil, fmt.Errorf("download pdb: %w", err)
 		}
 	} else if err != nil {

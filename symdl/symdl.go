@@ -3,10 +3,8 @@ package symdl
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"debug/pe"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -16,18 +14,14 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 )
 
 const (
 	DefaultSymbolServer      = "https://msdl.microsoft.com/download/symbols"
 	imageDirectoryEntryDebug = 6
 	imageDebugTypeCodeView   = 2
-	tempFileMarker           = ".symchk."
-	tempFileSuffix           = ".tmp"
 )
 
 type Config struct {
@@ -59,11 +53,10 @@ type Summary struct {
 }
 
 type Checker struct {
-	Ctx       context.Context
-	Config    Config
-	Client    *http.Client
-	Verbose   bool
-	TempFiles *TempFileManager
+	Ctx     context.Context
+	Config  Config
+	Client  *http.Client
+	Verbose bool
 }
 
 type checkFunc func(string) Result
@@ -76,127 +69,6 @@ type checkTask struct {
 type checkResult struct {
 	index  int
 	result Result
-}
-
-type TempFileManager struct {
-	pid     int
-	session string
-
-	mu     sync.Mutex
-	active map[string]struct{}
-}
-
-var pidExists = processExists
-
-func NewTempFileManager() (*TempFileManager, error) {
-	session, err := randomToken(8)
-	if err != nil {
-		return nil, err
-	}
-	return &TempFileManager{
-		pid:     os.Getpid(),
-		session: session,
-		active:  make(map[string]struct{}),
-	}, nil
-}
-
-func randomToken(n int) (string, error) {
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-func (m *TempFileManager) newTempPattern(cachePath string) string {
-	base := filepath.Base(cachePath)
-	return fmt.Sprintf("%s%s%d.%s.*%s", base, tempFileMarker, m.pid, m.session, tempFileSuffix)
-}
-
-func (m *TempFileManager) Register(path string) {
-	if m == nil {
-		return
-	}
-	m.mu.Lock()
-	m.active[path] = struct{}{}
-	m.mu.Unlock()
-}
-
-func (m *TempFileManager) Unregister(path string) {
-	if m == nil {
-		return
-	}
-	m.mu.Lock()
-	delete(m.active, path)
-	m.mu.Unlock()
-}
-
-func (m *TempFileManager) CleanupStale(cacheDir string) error {
-	if m == nil || cacheDir == "" {
-		return nil
-	}
-	if _, err := os.Stat(cacheDir); errors.Is(err, os.ErrNotExist) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	return filepath.WalkDir(cacheDir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		pid, ok := parseSymchkTempPID(filepath.Base(path))
-		if !ok {
-			return nil
-		}
-		if pidExists(pid) {
-			return nil
-		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return nil
-	})
-}
-
-func parseSymchkTempPID(name string) (int, bool) {
-	if !strings.HasSuffix(name, tempFileSuffix) {
-		return 0, false
-	}
-	idx := strings.Index(name, tempFileMarker)
-	if idx < 0 {
-		return 0, false
-	}
-	rest := strings.TrimSuffix(name[idx+len(tempFileMarker):], tempFileSuffix)
-	parts := strings.Split(rest, ".")
-	if len(parts) < 3 {
-		return 0, false
-	}
-	pid, err := strconv.Atoi(parts[0])
-	if err != nil || pid <= 0 {
-		return 0, false
-	}
-	if parts[1] == "" {
-		return 0, false
-	}
-	return pid, true
-}
-
-func processExists(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	if err := proc.Signal(syscall.Signal(0)); err == nil {
-		return true
-	}
-	return !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH)
 }
 
 func LoadConfig(outputDir string) (Config, error) {
@@ -471,7 +343,7 @@ func (c Checker) Check(filePath string) Result {
 		return result
 	}
 
-	if err := DownloadSymbol(c.Ctx, c.Client, result.URL, result.CachePath, c.TempFiles); err != nil {
+	if err := DownloadSymbol(c.Ctx, c.Client, result.URL, result.CachePath); err != nil {
 		result.Status = "download-failed"
 		result.Message = err.Error()
 		return result
@@ -617,7 +489,7 @@ func UpstreamSymbolURL(base string, info PDBInfo) string {
 	return base + "/" + relative
 }
 
-func DownloadSymbol(ctx context.Context, client *http.Client, symbolURL, cachePath string, tempFiles *TempFileManager) error {
+func DownloadSymbol(ctx context.Context, client *http.Client, symbolURL, cachePath string) error {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -643,19 +515,11 @@ func DownloadSymbol(ctx context.Context, client *http.Client, symbolURL, cachePa
 		return fmt.Errorf("unexpected HTTP status %s", resp.Status)
 	}
 
-	pattern := filepath.Base(cachePath) + ".*.tmp"
-	if tempFiles != nil {
-		pattern = tempFiles.newTempPattern(cachePath)
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(cachePath), pattern)
+	tmp, err := os.CreateTemp(filepath.Dir(cachePath), "*.tmp")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmp.Name()
-	if tempFiles != nil {
-		tempFiles.Register(tmpPath)
-		defer tempFiles.Unregister(tmpPath)
-	}
 	defer func() {
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)

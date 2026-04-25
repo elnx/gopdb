@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -182,68 +181,9 @@ func TestRunChecksWithParallelismLessThanOneFallsBackToOne(t *testing.T) {
 	}
 }
 
-func TestTempFileManagerCleanupStaleRemovesDeadPID(t *testing.T) {
-	dir := t.TempDir()
-	mgr, err := NewTempFileManager()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldPidExists := pidExists
-	pidExists = func(pid int) bool { return false }
-	defer func() { pidExists = oldPidExists }()
-	stale := filepath.Join(dir, "foo.pdb", "ABC", "foo.pdb.symchk.999999.deadbeef.123.tmp")
-	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(stale, []byte("stale"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := mgr.CleanupStale(dir); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stale temp file still exists: %v", err)
-	}
-}
-
-func TestTempFileManagerCleanupStaleKeepsLivePIDAndForeignNames(t *testing.T) {
-	dir := t.TempDir()
-	mgr, err := NewTempFileManager()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldPidExists := pidExists
-	pidExists = func(pid int) bool { return pid == os.Getpid() }
-	defer func() { pidExists = oldPidExists }()
-	live := filepath.Join(dir, "foo.pdb", "ABC", "foo.pdb.symchk."+strconv.Itoa(os.Getpid())+".session.123.tmp")
-	foreign := filepath.Join(dir, "foo.pdb", "ABC", "foo.pdb.random.tmp")
-	for _, name := range []string{live, foreign} {
-		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := mgr.CleanupStale(dir); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{live, foreign} {
-		if _, err := os.Stat(name); err != nil {
-			t.Fatalf("expected %s to remain: %v", name, err)
-		}
-	}
-}
-
-func TestDownloadSymbolCancelRemovesTempFile(t *testing.T) {
+func TestDownloadCancelRemovesTempFile(t *testing.T) {
 	dir := t.TempDir()
 	cachePath := filepath.Join(dir, "foo.pdb", "ABC123", "foo.pdb")
-	mgr, err := NewTempFileManager()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -261,7 +201,7 @@ func TestDownloadSymbolCancelRemovesTempFile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- DownloadSymbol(ctx, server.Client(), server.URL, cachePath, mgr)
+		errCh <- DownloadSymbol(ctx, server.Client(), server.URL, cachePath)
 	}()
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -272,7 +212,7 @@ func TestDownloadSymbolCancelRemovesTempFile(t *testing.T) {
 		}
 		if len(matches) > 0 {
 			cancel()
-			err = <-errCh
+			err := <-errCh
 			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), context.Canceled.Error()) {
 				t.Fatalf("DownloadSymbol() error = %v, want context cancellation", err)
 			}
@@ -296,43 +236,15 @@ func TestDownloadSymbolCancelRemovesTempFile(t *testing.T) {
 	t.Fatal("timed out waiting for temp file creation")
 }
 
-func TestIsPE(t *testing.T) {
-	dir := t.TempDir()
-	peFile := filepath.Join(dir, "test.pe")
-	nonPEFile := filepath.Join(dir, "test.txt")
-	noFile := filepath.Join(dir, "nonexistent")
-
-	if err := os.WriteFile(peFile, []byte("MZ\x90\x00\x03\x00\x00\x00"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(nonPEFile, []byte("not a PE file"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	if !IsPE(peFile) {
-		t.Error("IsPE(peFile) = false, want true")
-	}
-	if IsPE(nonPEFile) {
-		t.Error("IsPE(nonPEFile) = true, want false")
-	}
-	if IsPE(noFile) {
-		t.Error("IsPE(noFile) = true, want false")
-	}
-}
-
-func TestDownloadSymbolSuccessLeavesOnlyFinalFile(t *testing.T) {
+func TestDownloadSuccessLeavesOnlyFinalFile(t *testing.T) {
 	dir := t.TempDir()
 	cachePath := filepath.Join(dir, "foo.pdb", "ABC123", "foo.pdb")
-	mgr, err := NewTempFileManager()
-	if err != nil {
-		t.Fatal(err)
-	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("hello"))
 	}))
 	defer server.Close()
 
-	if err := DownloadSymbol(context.Background(), server.Client(), server.URL, cachePath, mgr); err != nil {
+	if err := DownloadSymbol(context.Background(), server.Client(), server.URL, cachePath); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(cachePath); err != nil {
@@ -386,6 +298,30 @@ func TestRunChecksWithStopsSchedulingOnCancel(t *testing.T) {
 	}
 	if cancelled == 0 {
 		t.Fatal("expected at least one result to reflect cancellation")
+	}
+}
+
+func TestIsPE(t *testing.T) {
+	dir := t.TempDir()
+	peFile := filepath.Join(dir, "test.pe")
+	nonPEFile := filepath.Join(dir, "test.txt")
+	noFile := filepath.Join(dir, "nonexistent")
+
+	if err := os.WriteFile(peFile, []byte("MZ\x90\x00\x03\x00\x00\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nonPEFile, []byte("not a PE file"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !IsPE(peFile) {
+		t.Error("IsPE(peFile) = false, want true")
+	}
+	if IsPE(nonPEFile) {
+		t.Error("IsPE(nonPEFile) = true, want false")
+	}
+	if IsPE(noFile) {
+		t.Error("IsPE(noFile) = true, want false")
 	}
 }
 

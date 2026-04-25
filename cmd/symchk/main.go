@@ -58,22 +58,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	tempFiles, err := symdl.NewTempFileManager()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "temp file manager error: %v\n", err)
-		os.Exit(1)
-	}
-	if err := tempFiles.CleanupStale(cfg.CacheDir); err != nil {
-		fmt.Fprintf(os.Stderr, "temp file cleanup error: %v\n", err)
-		os.Exit(1)
-	}
-
 	runner := symdl.Checker{
-		Ctx:       ctx,
-		Config:    cfg,
-		Client:    &http.Client{Timeout: 30 * time.Second},
-		Verbose:   verbose,
-		TempFiles: tempFiles,
+		Ctx:     ctx,
+		Config:  cfg,
+		Client:  &http.Client{Timeout: 30 * time.Second},
+		Verbose: verbose,
 	}
 
 	parallelism := 1
