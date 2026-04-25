@@ -1,8 +1,14 @@
 package gopdb
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/elnx/gopdb/symdl"
 )
 
 const (
@@ -68,13 +74,13 @@ type OMAPEntry struct {
 }
 
 type PDB struct {
-	msf         *MSFFile
-	Sections    []ImageSectionHeader
+	msf          *MSFFile
+	Sections     []ImageSectionHeader
 	OrigSections []ImageSectionHeader
-	OMapFromSrc []OMAPEntry
-	Symbols     []PublicSymbol
-	dbi         DBIHeader
-	dbgHdr      DBIDbgHeader
+	OMapFromSrc  []OMAPEntry
+	Symbols      []PublicSymbol
+	dbi          DBIHeader
+	dbgHdr       DBIDbgHeader
 }
 
 func OpenPDB(path string) (*PDB, error) {
@@ -94,6 +100,57 @@ func OpenPDB(path string) (*PDB, error) {
 
 func (p *PDB) Close() error {
 	return p.msf.Close()
+}
+
+type OpenPEOptions struct {
+	CacheDir string
+	Upstream string
+	Client   *http.Client
+	Context  context.Context
+}
+
+func OpenPE(peFile string, opts *OpenPEOptions) (*PDB, error) {
+	if opts == nil {
+		opts = &OpenPEOptions{}
+	}
+
+	cfg, err := symdl.LoadConfig(opts.CacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	if opts.Upstream != "" {
+		cfg.Upstream = opts.Upstream
+	}
+
+	info, err := symdl.ReadPDBInfo(peFile)
+	if err != nil {
+		return nil, fmt.Errorf("read pdb info: %w", err)
+	}
+
+	cachePath := symdl.LocalSymbolPath(cfg.CacheDir, info)
+
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		if cfg.Upstream == "" {
+			return nil, fmt.Errorf("symbol not in cache and no upstream configured")
+		}
+		client := opts.Client
+		if client == nil {
+			client = &http.Client{Timeout: 30 * time.Second}
+		}
+		ctx := opts.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		tempFiles, _ := symdl.NewTempFileManager()
+		if err := symdl.DownloadSymbol(ctx, client, symdl.UpstreamSymbolURL(cfg.Upstream, info), cachePath, tempFiles); err != nil {
+			return nil, fmt.Errorf("download pdb: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("stat cache: %w", err)
+	}
+
+	pdb, err := OpenPDB(cachePath)
+	return pdb, err
 }
 
 func (p *PDB) parse() error {

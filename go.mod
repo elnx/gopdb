@@ -1,3 +1,3 @@
-module github.com/user/gopdb
+module github.com/elnx/gopdb
 
 go 1.25.5

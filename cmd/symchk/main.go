@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/user/gopdb/symdl"
+	"github.com/elnx/gopdb/symdl"
 )
 
 func main() {

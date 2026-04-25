@@ -24,7 +24,7 @@ go run ./cmd/symchk -r -o /tmp/symbols ./bin
 
 ## Packages
 
-### `github.com/user/gopdb`
+### `github.com/elnx/gopdb`
 
 PDB parser API:
 
@@ -38,7 +38,7 @@ for _, sym := range pdb.Symbols {
 }
 ```
 
-### `github.com/user/gopdb/symdl`
+### `github.com/elnx/gopdb/symdl`
 
 PE parsing + PDB download API:
 

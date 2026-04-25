@@ -6,12 +6,13 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/user/gopdb"
+	"github.com/elnx/gopdb"
 )
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] <filename> <base_address>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] <file> <base_address>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\nAccepts PDB or PE files. PE files trigger automatic PDB download.\n")
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
 		flag.PrintDefaults()
 	}
@@ -31,9 +32,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	pdb, err := gopdb.OpenPDB(filename)
+	var pdb *gopdb.PDB
+	switch {
+	case isPEFile(filename):
+		fmt.Fprintf(os.Stderr, "[>] Input is a PE file, downloading PDB...\n")
+		pdb, err = gopdb.OpenPE(filename, nil)
+	default:
+		pdb, err = gopdb.OpenPDB(filename)
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening PDB: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	defer pdb.Close()
@@ -51,4 +59,34 @@ func main() {
 		rva := baseAddress + uint64(pdb.Remap(sym.Offset+virtBase))
 		fmt.Printf("%s,%#x,%d,%s\n", sym.Name, rva, sym.SymType, sects[segIdx].Name)
 	}
+}
+
+func isPEFile(path string) bool {
+	switch ext := lowercaseExt(path); ext {
+	case ".exe", ".dll", ".sys", ".ocx", ".drv":
+		return true
+	}
+	return false
+}
+
+func lowercaseExt(path string) string {
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '.' {
+			return toLower(path[i:])
+		}
+		if path[i] == '/' || path[i] == '\\' {
+			return ""
+		}
+	}
+	return ""
+}
+
+func toLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 32
+		}
+	}
+	return string(b)
 }
