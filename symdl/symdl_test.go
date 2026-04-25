@@ -296,6 +296,30 @@ func TestDownloadSymbolCancelRemovesTempFile(t *testing.T) {
 	t.Fatal("timed out waiting for temp file creation")
 }
 
+func TestIsPE(t *testing.T) {
+	dir := t.TempDir()
+	peFile := filepath.Join(dir, "test.pe")
+	nonPEFile := filepath.Join(dir, "test.txt")
+	noFile := filepath.Join(dir, "nonexistent")
+
+	if err := os.WriteFile(peFile, []byte("MZ\x90\x00\x03\x00\x00\x00"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nonPEFile, []byte("not a PE file"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !IsPE(peFile) {
+		t.Error("IsPE(peFile) = false, want true")
+	}
+	if IsPE(nonPEFile) {
+		t.Error("IsPE(nonPEFile) = true, want false")
+	}
+	if IsPE(noFile) {
+		t.Error("IsPE(noFile) = true, want false")
+	}
+}
+
 func TestDownloadSymbolSuccessLeavesOnlyFinalFile(t *testing.T) {
 	dir := t.TempDir()
 	cachePath := filepath.Join(dir, "foo.pdb", "ABC123", "foo.pdb")

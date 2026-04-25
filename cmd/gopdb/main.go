@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/elnx/gopdb"
+	"github.com/elnx/gopdb/symdl"
 )
 
 func main() {
@@ -33,11 +34,10 @@ func main() {
 	}
 
 	var pdb *gopdb.PDB
-	switch {
-	case isPEFile(filename):
+	if symdl.IsPE(filename) {
 		fmt.Fprintf(os.Stderr, "[>] Input is a PE file, downloading PDB...\n")
 		pdb, err = gopdb.OpenPE(filename, nil)
-	default:
+	} else {
 		pdb, err = gopdb.OpenPDB(filename)
 	}
 	if err != nil {
@@ -59,34 +59,4 @@ func main() {
 		rva := baseAddress + uint64(pdb.Remap(sym.Offset+virtBase))
 		fmt.Printf("%s,%#x,%d,%s\n", sym.Name, rva, sym.SymType, sects[segIdx].Name)
 	}
-}
-
-func isPEFile(path string) bool {
-	switch ext := lowercaseExt(path); ext {
-	case ".exe", ".dll", ".sys", ".ocx", ".drv":
-		return true
-	}
-	return false
-}
-
-func lowercaseExt(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '.' {
-			return toLower(path[i:])
-		}
-		if path[i] == '/' || path[i] == '\\' {
-			return ""
-		}
-	}
-	return ""
-}
-
-func toLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
 }

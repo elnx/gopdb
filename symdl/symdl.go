@@ -320,6 +320,19 @@ func isPEPath(path string) bool {
 	}
 }
 
+func IsPE(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var magic [2]byte
+	if _, err := io.ReadFull(f, magic[:]); err != nil {
+		return false
+	}
+	return magic[0] == 'M' && magic[1] == 'Z'
+}
+
 func RunChecks(checker Checker, files []string, parallelism int) ([]Result, Summary) {
 	return runChecksWith(checker.Ctx, checker.Check, files, parallelism)
 }

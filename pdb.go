@@ -25,6 +25,7 @@ const (
 
 type ImageSectionHeader struct {
 	Name           string
+	VirtualSize    uint32
 	VirtualAddress uint32
 	SizeOfRawData  uint32
 }
@@ -256,8 +257,9 @@ func (p *PDB) parseSectionHeaders(streamIdx int16) ([]ImageSectionHeader, error)
 			}
 		}
 		sections[i].Name = string(rawName[:nulIdx])
+		sections[i].VirtualSize = le.Uint32(data[off+8 : off+12])
 		sections[i].VirtualAddress = le.Uint32(data[off+12 : off+16])
-		sections[i].SizeOfRawData = le.Uint32(data[off+8 : off+12])
+		sections[i].SizeOfRawData = le.Uint32(data[off+16 : off+20])
 	}
 
 	return sections, nil

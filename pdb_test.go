@@ -15,6 +15,15 @@ func testPDBPath(t *testing.T) string {
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		t.Skipf("GOPDB_TEST_FILE not found: %s", p)
 	}
+	f, err := os.Open(p)
+	if err != nil {
+		t.Fatalf("cannot open GOPDB_TEST_FILE: %v", err)
+	}
+	defer f.Close()
+	var magic [2]byte
+	if _, err := f.Read(magic[:]); err == nil && magic[0] == 'M' && magic[1] == 'Z' {
+		t.Skipf("GOPDB_TEST_FILE appears to be a PE file, not a PDB: %s", p)
+	}
 	return p
 }
 
@@ -45,7 +54,7 @@ func TestReadStream(t *testing.T) {
 	}
 	defer msf.Close()
 
-	data, err := msf.ReadStream(3)
+	data, err := msf.ReadStream(streamDBI)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,3 +161,5 @@ func TestInvalidSignature(t *testing.T) {
 		t.Fatal("expected error for invalid signature")
 	}
 }
+
+
