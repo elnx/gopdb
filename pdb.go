@@ -110,17 +110,21 @@ type OpenPEOptions struct {
 	Context  context.Context
 }
 
-func OpenPE(peFile string, opts *OpenPEOptions) (*PDB, error) {
-	if opts == nil {
-		opts = &OpenPEOptions{}
+func OpenPE(peFile string, opts ...*OpenPEOptions) (*PDB, error) {
+	var o *OpenPEOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	if o == nil {
+		o = &OpenPEOptions{}
 	}
 
-	cfg, err := symdl.LoadConfig(opts.CacheDir)
+	cfg, err := symdl.LoadConfig(o.CacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
-	if opts.Upstream != "" {
-		cfg.Upstream = opts.Upstream
+	if o.Upstream != "" {
+		cfg.Upstream = o.Upstream
 	}
 
 	info, err := symdl.ReadPDBInfo(peFile)
@@ -134,11 +138,11 @@ func OpenPE(peFile string, opts *OpenPEOptions) (*PDB, error) {
 		if cfg.Upstream == "" {
 			return nil, fmt.Errorf("symbol not in cache and no upstream configured")
 		}
-		client := opts.Client
+		client := o.Client
 		if client == nil {
 			client = &http.Client{Timeout: 30 * time.Second}
 		}
-		ctx := opts.Context
+		ctx := o.Context
 		if ctx == nil {
 			ctx = context.Background()
 		}

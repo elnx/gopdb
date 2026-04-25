@@ -53,10 +53,8 @@ for _, sym := range pdb.Symbols {
 ### From a PE file (auto-download + parse)
 
 ```go
-pdb, err := gopdb.OpenPE("kernel32.dll", &gopdb.OpenPEOptions{
-    CacheDir: "/tmp/symbols",
-    Context:  context.Background(),
-})
+// Simple — defaults: .cache/symbols/, msdl.microsoft.com
+pdb, err := gopdb.OpenPE("kernel32.dll")
 if err != nil {
     log.Fatal(err)
 }
@@ -65,6 +63,21 @@ defer pdb.Close()
 for _, sym := range pdb.Symbols {
     fmt.Printf("%s,%#x,%d,%s\n", sym.Name, sym.Offset, sym.SymType, sym.Segment)
 }
+```
+
+```go
+// Custom — specific cache dir, context, HTTP client
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+pdb, err := gopdb.OpenPE("kernel32.dll", &gopdb.OpenPEOptions{
+    CacheDir: "/tmp/symbols",
+    Context:  ctx,
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer pdb.Close()
 ```
 
 ### Extract PDB info from PE without downloading

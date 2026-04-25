@@ -36,7 +36,7 @@ func main() {
 	var pdb *gopdb.PDB
 	if symdl.IsPE(filename) {
 		fmt.Fprintf(os.Stderr, "[>] Input is a PE file, downloading PDB...\n")
-		pdb, err = gopdb.OpenPE(filename, nil)
+		pdb, err = gopdb.OpenPE(filename)
 	} else {
 		pdb, err = gopdb.OpenPDB(filename)
 	}

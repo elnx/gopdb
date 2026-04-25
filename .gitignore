@@ -2,3 +2,4 @@
 /symchk
 .cache/
 *.test
+.README.md.swp
