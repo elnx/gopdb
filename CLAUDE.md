@@ -41,6 +41,12 @@ Set `GOPDB_TEST_FILE` to a PDB file path to run PDB-dependent tests. Without it,
 GOPDB_TEST_FILE=/path/to/file.pdb go test -v ./...
 ```
 
+Set `GOPDB_TEST_PE_FILE` to a PE file path to run PE-dependent tests (ReadPDBInfo end-to-end).
+
+```bash
+GOPDB_TEST_PE_FILE=/path/to/file.dll GOPDB_TEST_FILE=/path/to.pdb go test -v ./...
+```
+
 ## Reference
 
 PDB parser ported from Python `pdbparse` library. Reference output verified byte-identical via `diff`.

@@ -388,3 +388,25 @@ func TestRunChecksWithStopsSchedulingOnCancel(t *testing.T) {
 		t.Fatal("expected at least one result to reflect cancellation")
 	}
 }
+
+func TestReadPDBInfoRealPE(t *testing.T) {
+	p := os.Getenv("GOPDB_TEST_PE_FILE")
+	if p == "" {
+		t.Skip("GOPDB_TEST_PE_FILE not set, skipping PE-dependent test")
+	}
+	if !IsPE(p) {
+		t.Skipf("GOPDB_TEST_PE_FILE is not a PE file: %s", p)
+	}
+
+	info, err := ReadPDBInfo(p)
+	if err != nil {
+		t.Fatalf("ReadPDBInfo(%s): %v", p, err)
+	}
+	if info.Name == "" {
+		t.Error("PDBName is empty")
+	}
+	if info.GUIDAge == "" {
+		t.Error("GUIDAge is empty")
+	}
+	t.Logf("pdb=%s guidage=%s", info.Name, info.GUIDAge)
+}
