@@ -1,67 +1,123 @@
 # gopdb
 
-Pure Go library and CLI tools for Windows PDB symbol files.
+Pure Go library and CLI tools for Windows PDB symbol files. Zero external dependencies.
 
-## Tools
+[![Go Reference](https://pkg.go.dev/badge/github.com/elnx/gopdb.svg)](https://pkg.go.dev/github.com/elnx/gopdb)
 
-### `gopdb` — PDB symbol parser
-
-Parses PDB (MSF 7.00) files and outputs symbol maps.
+## Install
 
 ```bash
-go run ./cmd/gopdb win32kbase.pdb 0x180000000
+go install github.com/elnx/gopdb/cmd/gopdb@latest
+go install github.com/elnx/gopdb/cmd/symchk@latest
 ```
 
-Output: `symbol_name,virtual_address,symtype,section_name`
-
-### `symchk` — PE scanner + PDB downloader
-
-Scans PE files for debug info, downloads matching PDBs from symbol servers.
+## CLI Usage
 
 ```bash
-go run ./cmd/symchk -r -o /tmp/symbols ./bin
+# From a PDB file (fast, no network)
+gopdb kernel32.pdb 0x180000000
+
+# From a PE file (auto-downloads PDB, then parses)
+gopdb kernel32.dll 0x180000000
+
+# Scan directory, download missing PDBs
+symchk -r -v ./system32
+```
+
+## Library Usage
+
+### Import
+
+```go
+import (
+    "github.com/elnx/gopdb"         // PDB parse
+    "github.com/elnx/gopdb/symdl"    // PE scan + PDB download
+)
+```
+
+### From a PDB file
+
+```go
+pdb, err := gopdb.OpenPDB("kernel32.pdb")
+if err != nil {
+    log.Fatal(err)
+}
+defer pdb.Close()
+
+for _, sym := range pdb.Symbols {
+    fmt.Printf("%s,%#x,%d,%s\n",
+        sym.Name, sym.Offset, sym.SymType, sym.Segment)
+}
+```
+
+### From a PE file (auto-download + parse)
+
+```go
+pdb, err := gopdb.OpenPE("kernel32.dll", &gopdb.OpenPEOptions{
+    CacheDir: "/tmp/symbols",
+    Context:  context.Background(),
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer pdb.Close()
+
+for _, sym := range pdb.Symbols {
+    fmt.Printf("%s,%#x,%d,%s\n", sym.Name, sym.Offset, sym.SymType, sym.Segment)
+}
+```
+
+### Extract PDB info from PE without downloading
+
+```go
+info, err := symdl.ReadPDBInfo("kernel32.dll")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(info.Name)    // "kernel32.pdb"
+fmt.Println(info.GUIDAge) // "12345678..."
+```
+
+### Batch check/download PDBs for many PE files
+
+```go
+cfg, _ := symdl.LoadConfig("")
+checker := symdl.Checker{
+    Ctx:    context.Background(),
+    Config: cfg,
+    Client: &http.Client{Timeout: 30 * time.Second},
+}
+
+files, _ := symdl.CollectTargets("./bin", true)
+results, summary := symdl.RunChecks(checker, files, 4)
+
+fmt.Printf("done: %d cached, %d downloaded\n",
+    summary.Cached, summary.Downloaded)
 ```
 
 ## Packages
 
-### `github.com/elnx/gopdb`
+| Package | Purpose |
+|---------|---------|
+| `gopdb` | PDB parser: MSF container, DBI stream, section headers, symbol records, OMAP |
+| `symdl` | PE scanner + PDB downloader: CodeView parsing, symbol server, temp file mgmt |
 
-PDB parser API:
+## CLI Tools
 
-```go
-pdb, err := gopdb.OpenPDB("path/to/file.pdb")
-if err != nil { ... }
-defer pdb.Close()
+| Binary | What it does |
+|--------|--------------|
+| `cmd/gopdb` | `gopdb <file> <base_addr>` — parse PDB or PE into CSV symbol map |
+| `cmd/symchk` | `symchk [-r] [-v] [-t n] [-o dir] <file\|dir>` — scan PE, download PDB |
 
-for _, sym := range pdb.Symbols {
-    fmt.Printf("%s: offset=%#x segment=%d\n", sym.Name, sym.Offset, sym.Segment)
-}
-```
-
-### `github.com/elnx/gopdb/symdl`
-
-PE parsing + PDB download API:
-
-```go
-info, err := symdl.ReadPDBInfo("kernel32.dll")
-// info.Name = "kernel32.pdb", info.GUIDAge = "..."
-
-cfg, _ := symdl.LoadConfig("/tmp/symbols")
-checker := symdl.Checker{Config: cfg, Ctx: ctx}
-result := checker.Check("kernel32.dll")
-// result.Status = "downloaded"
-```
-
-## Building
+## Build
 
 ```bash
-make build       # gopdb binary
-make build-all   # gopdb + symchk binaries
+make build-all       # gopdb + symchk binaries
+go build ./...       # all packages
 ```
 
-## Testing
+## Test
 
 ```bash
-make test
-make test GOPDB_TEST_FILE=/path/to/file.pdb
+GOPDB_TEST_FILE=/path/to/file.pdb GOPDB_TEST_PE_FILE=/path/to/file.dll go test -v ./...
 ```
