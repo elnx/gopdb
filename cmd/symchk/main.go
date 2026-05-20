@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/elnx/gopdb/symdl"
@@ -70,10 +71,14 @@ func main() {
 		parallelism = threads
 	}
 
-	results, summary := symdl.RunChecks(runner, files, parallelism)
-	for _, result := range results {
+	var mu sync.Mutex
+	onResult := func(result symdl.Result) {
+		mu.Lock()
+		defer mu.Unlock()
 		printResult(os.Stdout, result, verbose)
 	}
+
+	_, summary := symdl.RunChecksWithCallback(runner, files, parallelism, onResult)
 	printSummary(os.Stdout, summary)
 
 	if summary.Failures > 0 {

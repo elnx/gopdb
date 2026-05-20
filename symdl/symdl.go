@@ -206,10 +206,14 @@ func IsPE(path string) bool {
 }
 
 func RunChecks(checker Checker, files []string, parallelism int) ([]Result, Summary) {
-	return runChecksWith(checker.Ctx, checker.Check, files, parallelism)
+	return runChecksWith(checker.Ctx, checker.Check, files, parallelism, nil)
 }
 
-func runChecksWith(ctx context.Context, check checkFunc, files []string, parallelism int) ([]Result, Summary) {
+func RunChecksWithCallback(runner Checker, files []string, parallelism int, onResult func(Result)) ([]Result, Summary) {
+	return runChecksWith(runner.Ctx, runner.Check, files, parallelism, onResult)
+}
+
+func runChecksWith(ctx context.Context, check checkFunc, files []string, parallelism int, onResult func(Result)) ([]Result, Summary) {
 	results := make([]Result, len(files))
 
 	if len(files) == 0 {
@@ -241,6 +245,9 @@ func runChecksWith(ctx context.Context, check checkFunc, files []string, paralle
 			result := check(path)
 			results[i] = result
 			summary.Add(result)
+			if onResult != nil {
+				onResult(result)
+			}
 		}
 		return results, summary
 	}
@@ -261,7 +268,11 @@ func runChecksWith(ctx context.Context, check checkFunc, files []string, paralle
 					if !ok {
 						return
 					}
-					out <- checkResult{index: task.index, result: check(task.path)}
+					r := check(task.path)
+					if onResult != nil {
+						onResult(r)
+					}
+					out <- checkResult{index: task.index, result: r}
 				}
 			}
 		}()
@@ -429,6 +440,15 @@ type imageDebugDirectory struct {
 	PointerToRawData uint32
 }
 
+func pdbBasename(raw string) string {
+	for i := len(raw) - 1; i >= 0; i-- {
+		if raw[i] == '\\' {
+			return raw[i+1:]
+		}
+	}
+	return raw
+}
+
 func parseCodeViewData(data []byte) (PDBInfo, error) {
 	if len(data) < 24 {
 		return PDBInfo{}, errors.New("CodeView data too small")
@@ -443,7 +463,8 @@ func parseCodeViewData(data []byte) (PDBInfo, error) {
 	if idx >= 0 {
 		nameBytes = nameBytes[:idx]
 	}
-	name := filepath.Base(string(nameBytes))
+	raw := string(nameBytes)
+	name := pdbBasename(raw)
 	if name == "" {
 		return PDBInfo{}, errors.New("empty PDB name")
 	}
@@ -497,10 +518,6 @@ func DownloadSymbol(ctx context.Context, client *http.Client, symbolURL, cachePa
 		ctx = context.Background()
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		return err
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, symbolURL, nil)
 	if err != nil {
 		return err
@@ -513,6 +530,10 @@ func DownloadSymbol(ctx context.Context, client *http.Client, symbolURL, cachePa
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected HTTP status %s", resp.Status)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+		return err
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(cachePath), "*.tmp")

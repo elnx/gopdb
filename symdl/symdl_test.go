@@ -115,7 +115,7 @@ func TestRunChecksWithSequential(t *testing.T) {
 	files := []string{"a.exe", "b.dll", "c.sys"}
 	results, summary := runChecksWith(context.Background(), func(path string) Result {
 		return Result{Path: path, Status: "cached"}
-	}, files, 1)
+	}, files, 1, nil)
 
 	if len(results) != len(files) {
 		t.Fatalf("runChecksWith() len = %d, want %d", len(results), len(files))
@@ -149,7 +149,7 @@ func TestRunChecksWithParallelKeepsOrderAndSummary(t *testing.T) {
 		default:
 			return Result{Path: path, Status: "cached"}
 		}
-	}, files, 3)
+	}, files, 3, nil)
 
 	if len(results) != len(files) {
 		t.Fatalf("runChecksWith() len = %d, want %d", len(results), len(files))
@@ -171,7 +171,7 @@ func TestRunChecksWithParallelismLessThanOneFallsBackToOne(t *testing.T) {
 	files := []string{"a.exe", "b.dll"}
 	results, summary := runChecksWith(context.Background(), func(path string) Result {
 		return Result{Path: path, Status: "missing-debug-info"}
-	}, files, 0)
+	}, files, 0, nil)
 
 	if len(results) != len(files) {
 		t.Fatalf("runChecksWith() len = %d, want %d", len(results), len(files))
@@ -273,7 +273,7 @@ func TestRunChecksWithStopsSchedulingOnCancel(t *testing.T) {
 		}
 		time.Sleep(30 * time.Millisecond)
 		return Result{Path: path, Status: "cached"}
-	}, files, 3)
+	}, files, 3, nil)
 
 	startedCount := len(started)
 	if startedCount >= len(files) {
@@ -322,6 +322,77 @@ func TestIsPE(t *testing.T) {
 	}
 	if IsPE(noFile) {
 		t.Error("IsPE(noFile) = true, want false")
+	}
+}
+
+func TestPdbBasename(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"foo.pdb", "foo.pdb"},
+		{"some\\relative\\path.pdb", "path.pdb"},
+		{"C:\\Users\\dev\\project\\x64\\Release\\foo.pdb", "foo.pdb"},
+		{"\\\\server\\share\\foo.pdb", "foo.pdb"},
+		{"\\foo.pdb", "foo.pdb"},
+		{"path\\", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := pdbBasename(tt.input)
+			if got != tt.want {
+				t.Fatalf("pdbBasename(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseCodeViewDataAbsolutePathExtractsBasename(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"windows drive letter", "C:\\Users\\dev\\project\\x64\\Release\\foo.pdb", "foo.pdb"},
+		{"unc path", "\\\\server\\share\\bar.pdb", "bar.pdb"},
+		{"backslash relative", "some\\relative\\path.pdb", "path.pdb"},
+		{"plain name", "plain.pdb", "plain.pdb"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := append([]byte("RSDS"), make([]byte, 20)...)
+			data = append(data, []byte(tt.raw)...)
+			info, err := parseCodeViewData(data)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if info.Name != tt.want {
+				t.Fatalf("Name = %q, want %q", info.Name, tt.want)
+			}
+		})
+	}
+}
+
+func TestDownloadSymbolMkdirOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	cachePath := filepath.Join(dir, "foo.pdb", "ABC123", "foo.pdb")
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	err := DownloadSymbol(context.Background(), server.Client(), server.URL, cachePath)
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if !called {
+		t.Fatal("server was not called")
+	}
+	if _, statErr := os.Stat(filepath.Dir(cachePath)); !os.IsNotExist(statErr) {
+		t.Fatalf("directory should not exist after 404, stat error: %v", statErr)
 	}
 }
 
