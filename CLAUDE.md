@@ -97,7 +97,7 @@ make build-all              # build both binaries
 - `ActiveSections()` returns `OrigSections` if present (for OMAP scenarios), else `Sections`.
 - Symbol types: `S_PUB32_V3 = 0x110E` (null-terminated name), `S_PUB32_V2 = 0x1009` (length-prefixed name).
 - Addresses are 64-bit in the CLI (`uint64`) but offsets within PDB are 32-bit (`uint32`).
-- `symdl` package supports `NT_SYMBOL_PATH` env var parsing (`srv*cache*upstream` format).
+- `symdl` package supports `_NT_SYMBOL_PATH` env var parsing (`srv*cache*upstream` format).
 
 ## Test Data
 

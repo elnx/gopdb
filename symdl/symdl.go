@@ -72,7 +72,7 @@ type checkResult struct {
 }
 
 func LoadConfig(outputDir string) (Config, error) {
-	value := strings.TrimSpace(os.Getenv("NT_SYMBOL_PATH"))
+	value := strings.TrimSpace(os.Getenv("_NT_SYMBOL_PATH"))
 	if value != "" {
 		cfg, ok, err := ParseSymbolPath(value)
 		if err != nil {

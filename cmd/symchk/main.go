@@ -23,7 +23,7 @@ func main() {
 	flag.BoolVar(&recurse, "r", false, "recurse into directories")
 	flag.BoolVar(&verbose, "v", false, "print verbose details")
 	flag.IntVar(&threads, "t", 1, "number of concurrent workers when using -r")
-	flag.StringVar(&outputDir, "o", "", "symbol cache directory (overrides NT_SYMBOL_PATH local cache)")
+	flag.StringVar(&outputDir, "o", "", "symbol cache directory (overrides _NT_SYMBOL_PATH local cache)")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [-r] [-v] [-t n] [-o dir] <file-or-directory>\n", os.Args[0])
 		flag.PrintDefaults()
