@@ -152,8 +152,8 @@ func CollectTargets(target string, recurse bool) ([]string, error) {
 	}
 
 	if !info.IsDir() {
-		if !isPEPath(target) {
-			return nil, fmt.Errorf("%s is not a supported PE file", target)
+		if !IsPE(target) {
+			return nil, fmt.Errorf("%s is not a valid PE file", target)
 		}
 		return []string{target}, nil
 	}
