@@ -13,7 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -101,8 +101,8 @@ func LoadConfig(outputDir string) (Config, error) {
 }
 
 func ParseSymbolPath(value string) (Config, bool, error) {
-	entries := strings.Split(value, ";")
-	for _, entry := range entries {
+	entries := strings.SplitSeq(value, ";")
+	for entry := range entries {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue
@@ -179,7 +179,7 @@ func CollectTargets(target string, recurse bool) ([]string, error) {
 		return nil, err
 	}
 
-	sort.Strings(files)
+	slices.Sort(files)
 	return files, nil
 }
 
@@ -257,9 +257,7 @@ func runChecksWith(ctx context.Context, check checkFunc, files []string, paralle
 	var wg sync.WaitGroup
 
 	for range parallelism {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-ctx.Done():
@@ -275,7 +273,7 @@ func runChecksWith(ctx context.Context, check checkFunc, files []string, paralle
 					out <- checkResult{index: task.index, result: r}
 				}
 			}
-		}()
+		})
 	}
 
 	go func() {
@@ -404,7 +402,7 @@ func ReadPDBInfo(filePath string) (PDBInfo, error) {
 
 	entriesSize := binary.Size(imageDebugDirectory{})
 	count := int(debugDir.Size) / entriesSize
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var entry imageDebugDirectory
 		if _, err := file.Seek(int64(debugOffset)+int64(i*entriesSize), io.SeekStart); err != nil {
 			return PDBInfo{}, err

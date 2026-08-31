@@ -3,6 +3,7 @@ package gopdb
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -31,41 +32,41 @@ type ImageSectionHeader struct {
 }
 
 type PublicSymbol struct {
-	Name     string
-	Offset   uint32
-	Segment  uint16
-	SymType  uint32
+	Name    string
+	Offset  uint32
+	Segment uint16
+	SymType uint32
 }
 
 type DBIHeader struct {
-	Version       uint32
-	Age           uint32
-	GSSymStream   int16
-	PSSymStream   int16
-	SymRecStream  int16
-	ModuleSize    uint32
-	SecConSize    uint32
-	SecMapSize    uint32
-	FilInfSize    uint32
-	TSMapSize     uint32
-	MFCIndex      uint32
-	DbgHdrSize    uint32
-	ECInfoSize    uint32
-	Flags         uint16
-	Machine       uint16
+	Version      uint32
+	Age          uint32
+	GSSymStream  int16
+	PSSymStream  int16
+	SymRecStream int16
+	ModuleSize   uint32
+	SecConSize   uint32
+	SecMapSize   uint32
+	FilInfSize   uint32
+	TSMapSize    uint32
+	MFCIndex     uint32
+	DbgHdrSize   uint32
+	ECInfoSize   uint32
+	Flags        uint16
+	Machine      uint16
 }
 
 type DBIDbgHeader struct {
-	SnFPO           int16
-	SnException     int16
-	SnFixup         int16
-	SnOmapToSrc     int16
-	SnOmapFromSrc   int16
-	SnSectionHdr    int16
-	SnTokenRidMap   int16
-	SnXdata         int16
-	SnPdata         int16
-	SnNewFPO        int16
+	SnFPO            int16
+	SnException      int16
+	SnFixup          int16
+	SnOmapToSrc      int16
+	SnOmapFromSrc    int16
+	SnSectionHdr     int16
+	SnTokenRidMap    int16
+	SnXdata          int16
+	SnPdata          int16
+	SnNewFPO         int16
 	SnSectionHdrOrig int16
 }
 
@@ -134,7 +135,7 @@ func OpenPE(peFile string, opts ...*OpenPEOptions) (*PDB, error) {
 
 	cachePath := symdl.LocalSymbolPath(cfg.CacheDir, info)
 
-	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+	if _, err := os.Stat(cachePath); errors.Is(err, os.ErrNotExist) {
 		if cfg.Upstream == "" {
 			return nil, fmt.Errorf("symbol not in cache and no upstream configured")
 		}
@@ -249,7 +250,7 @@ func (p *PDB) parseSectionHeaders(streamIdx int16) ([]ImageSectionHeader, error)
 	sections := make([]ImageSectionHeader, numSections)
 	le := binary.LittleEndian
 
-	for i := 0; i < numSections; i++ {
+	for i := range numSections {
 		off := i * sectionSize
 		rawName := data[off : off+8]
 		nulIdx := len(rawName)
@@ -299,7 +300,7 @@ func (p *PDB) parseOMap() error {
 	p.OMapFromSrc = make([]OMAPEntry, numEntries)
 
 	le := binary.LittleEndian
-	for i := 0; i < numEntries; i++ {
+	for i := range numEntries {
 		off := i * entrySize
 		p.OMapFromSrc[i].From = le.Uint32(data[off:])
 		p.OMapFromSrc[i].To = le.Uint32(data[off+4:])

@@ -1,6 +1,7 @@
 package gopdb
 
 import (
+	"io"
 	"os"
 	"testing"
 )
@@ -17,7 +18,7 @@ func benchPDBPath(b *testing.B) string {
 	}
 	defer f.Close()
 	var magic [2]byte
-	if _, err := f.Read(magic[:]); err == nil && magic[0] == 'M' && magic[1] == 'Z' {
+	if _, err := io.ReadFull(f, magic[:]); err == nil && magic[0] == 'M' && magic[1] == 'Z' {
 		b.Skipf("GOPDB_TEST_FILE appears to be a PE file, not a PDB: %s", p)
 	}
 	return p
@@ -25,8 +26,7 @@ func benchPDBPath(b *testing.B) string {
 
 func BenchmarkOpenMSF(b *testing.B) {
 	path := benchPDBPath(b)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		msf, err := OpenMSF(path)
 		if err != nil {
 			b.Fatal(err)
@@ -37,8 +37,7 @@ func BenchmarkOpenMSF(b *testing.B) {
 
 func BenchmarkOpenPDB(b *testing.B) {
 	path := benchPDBPath(b)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		pdb, err := OpenPDB(path)
 		if err != nil {
 			b.Fatal(err)
@@ -55,8 +54,7 @@ func BenchmarkParseSymbols(b *testing.B) {
 	}
 	defer pdb.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		pdb.Symbols = nil
 		if err := pdb.parseSymbols(); err != nil {
 			b.Fatal(err)
@@ -73,8 +71,7 @@ func BenchmarkReadAllStreams(b *testing.B) {
 	}
 	defer msf.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for idx := range msf.Streams {
 			if msf.Streams[idx].Size == 0 {
 				continue

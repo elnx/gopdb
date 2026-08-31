@@ -1,6 +1,8 @@
 package gopdb
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +14,7 @@ func testPDBPath(t *testing.T) string {
 	if p == "" {
 		t.Skip("GOPDB_TEST_FILE not set, skipping PDB-dependent test")
 	}
-	if _, err := os.Stat(p); os.IsNotExist(err) {
+	if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
 		t.Skipf("GOPDB_TEST_FILE not found: %s", p)
 	}
 	f, err := os.Open(p)
@@ -21,7 +23,7 @@ func testPDBPath(t *testing.T) string {
 	}
 	defer f.Close()
 	var magic [2]byte
-	if _, err := f.Read(magic[:]); err == nil && magic[0] == 'M' && magic[1] == 'Z' {
+	if _, err := io.ReadFull(f, magic[:]); err == nil && magic[0] == 'M' && magic[1] == 'Z' {
 		t.Skipf("GOPDB_TEST_FILE appears to be a PE file, not a PDB: %s", p)
 	}
 	return p
@@ -153,7 +155,7 @@ func TestInvalidPath(t *testing.T) {
 func TestInvalidSignature(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "bad.pdb")
-	if err := os.WriteFile(tmpFile, []byte("NOT_A_PDB_FILE_1234567890123456"), 0644); err != nil {
+	if err := os.WriteFile(tmpFile, []byte("NOT_A_PDB_FILE_1234567890123456"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := OpenPDB(tmpFile)
@@ -161,5 +163,3 @@ func TestInvalidSignature(t *testing.T) {
 		t.Fatal("expected error for invalid signature")
 	}
 }
-
-

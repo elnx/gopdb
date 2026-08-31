@@ -307,10 +307,10 @@ func TestIsPE(t *testing.T) {
 	nonPEFile := filepath.Join(dir, "test.txt")
 	noFile := filepath.Join(dir, "nonexistent")
 
-	if err := os.WriteFile(peFile, []byte("MZ\x90\x00\x03\x00\x00\x00"), 0644); err != nil {
+	if err := os.WriteFile(peFile, []byte("MZ\x90\x00\x03\x00\x00\x00"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(nonPEFile, []byte("not a PE file"), 0644); err != nil {
+	if err := os.WriteFile(nonPEFile, []byte("not a PE file"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -391,7 +391,7 @@ func TestDownloadSymbolMkdirOnSuccess(t *testing.T) {
 	if !called {
 		t.Fatal("server was not called")
 	}
-	if _, statErr := os.Stat(filepath.Dir(cachePath)); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Dir(cachePath)); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("directory should not exist after 404, stat error: %v", statErr)
 	}
 }

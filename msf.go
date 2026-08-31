@@ -94,7 +94,7 @@ func (m *MSFFile) parseHeader() error {
 	}
 
 	rootPageList := make([]uint32, numRootPages)
-	for i := uint32(0); i < numRootPages; i++ {
+	for i := range numRootPages {
 		rootPageList[i] = le.Uint32(rootIndexData[i*4:])
 	}
 
@@ -120,7 +120,7 @@ func (m *MSFFile) parseHeader() error {
 	}
 
 	sizes := make([]uint32, numStreams)
-	for i := uint32(0); i < numStreams; i++ {
+	for i := range numStreams {
 		sz := le.Uint32(rootData[offset : offset+4])
 		offset += 4
 		if sz == 0xFFFFFFFF {
@@ -130,13 +130,13 @@ func (m *MSFFile) parseHeader() error {
 	}
 
 	m.Streams = make([]Stream, numStreams)
-	for i := uint32(0); i < numStreams; i++ {
+	for i := range numStreams {
 		if sizes[i] == 0 {
 			continue
 		}
 		np := (sizes[i] + m.PageSize - 1) / m.PageSize
 		pages := make([]uint32, np)
-		for j := uint32(0); j < np; j++ {
+		for j := range np {
 			pages[j] = le.Uint32(rootData[offset : offset+4])
 			offset += 4
 		}
